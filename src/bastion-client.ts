@@ -88,7 +88,17 @@ async function connectViaBastion(
       })
       .json<ConnectResponse>();
   } catch (e: unknown) {
-    const detail = e instanceof Error ? e.message : String(e);
+    let detail = e instanceof Error ? e.message : String(e);
+    // Surface the response body so 4xx/5xx errors don't disappear into
+    // got's terse "Response code 500 (INTERNAL SERVER ERROR)" string.
+    const anyErr = e as { response?: { body?: unknown; statusCode?: number } };
+    if (anyErr.response?.body !== undefined) {
+      const body =
+        typeof anyErr.response.body === "string"
+          ? anyErr.response.body
+          : JSON.stringify(anyErr.response.body);
+      detail += `\n--- response body (${anyErr.response.statusCode}) ---\n${body}`;
+    }
     throw new Error(`bastion /api/connect failed: ${detail}`);
   }
 
