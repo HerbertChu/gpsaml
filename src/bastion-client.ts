@@ -83,7 +83,11 @@ async function connectViaBastion(
           "Content-Type": "application/json",
           "X-GPSAML-Signature": signature,
         },
-        timeout: { request: 60_000 },
+        // The bastion's provision can take 60–120s end-to-end (HIP +
+        // auth + tunnel-up poll, longer on a warm reconnect that has
+        // to tear down a prior session first). Server-side timeouts
+        // are 180s; give the client a bit more headroom.
+        timeout: { request: 240_000 },
         retry: { limit: 0 },
       })
       .json<ConnectResponse>();
