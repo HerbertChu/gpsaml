@@ -4,6 +4,11 @@ import isElevated from "is-elevated";
 import sudo from "@expo/sudo-prompt";
 import { Gateway, Portal } from "./endpoints";
 import { connectVpn } from "./openconnect";
+import {
+  connectViaBastion,
+  disconnectFromBastion,
+  readBastionConfig,
+} from "./bastion-client";
 import * as log from "loglevel";
 import { createHostWindow } from "./vpn-host-window";
 import { createGatewaySelectionWindow } from "./gateway-selection-window";
@@ -148,6 +153,11 @@ async function enterEntryPoint(): Promise<void> {
     hostWindow.close();
     const fingerprint = portal.fingerprint;
 
+    const bastion = readBastionConfig();
+    if (bastion) {
+      log.info(`bastion mode active (${bastion.url})`);
+    }
+
     // Backoff schedule (ms) — capped at 60s, used after the n-th failure.
     const BACKOFF = [2000, 5000, 10000, 20000, 30000, 60000];
 
@@ -198,6 +208,40 @@ async function enterEntryPoint(): Promise<void> {
             { once: true },
           );
         });
+
+      // ── bastion mode: single-shot, sshuttle owns reconnects ─────────
+      if (bastion) {
+        let loginResp;
+        try {
+          loginResp = await gateway.doLogin();
+          vpnProcess = await connectViaBastion(
+            loginResp,
+            fingerprint!,
+            gateway.hostname,
+            bastion,
+          );
+          statusWindow.notifyConnected();
+        } catch (e) {
+          log.error("bastion connect failed:", e);
+          statusWindow.notifyDisconnected();
+          await statusWindow.awaitDisconnect;
+          statusWindow.close();
+          statusWindow = null;
+          app.quit();
+          return;
+        }
+
+        await waitClose(vpnProcess);
+
+        if (loginResp) {
+          await disconnectFromBastion(bastion, loginResp.user);
+        }
+        vpnProcess = null;
+        statusWindow.close();
+        statusWindow = null;
+        app.quit();
+        return;
+      }
 
       let attempt = 0;
       let stoppedReason: "user" | "auth-failed" | null = null;
