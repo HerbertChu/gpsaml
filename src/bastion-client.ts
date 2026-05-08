@@ -15,14 +15,29 @@
 
 import { ChildProcess, spawn } from "child_process";
 import { createHmac } from "crypto";
-import { chmodSync, mkdirSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { join, dirname } from "path";
+import { chmodSync, writeFileSync } from "fs";
 import got from "got";
 import * as log from "loglevel";
 import { LoginResponse } from "./openconnect";
 
-const KEY_PATH = join(homedir(), ".ssh", "gpsaml_proxy_id");
+// Always /tmp, never ~/.ssh: gpsaml runs elevated (sudo-prompt → root),
+// so homedir() resolves to /var/root rather than the original user's
+// home, and the user's local sshuttle (which we spawn from this same
+// elevated process) wouldn't be able to read a key tucked under
+// /var/root anyway.
+const KEY_PATH = "/tmp/gpsaml-proxy-id";
+
+// macOS sudo-prompt strips PATH; sshuttle lives at /opt/homebrew/bin
+// (Apple Silicon) or /usr/local/bin (Intel). Mirror the trick used by
+// openconnect.ts: prepend the Homebrew bin dirs so a bare `spawn(
+// "sshuttle", …)` resolves.
+function spawnEnvWithBrewPath(): NodeJS.ProcessEnv {
+  if (process.platform !== "darwin") return process.env;
+  const extra = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const current = (process.env.PATH ?? "").split(":").filter(Boolean);
+  const merged = [...extra, ...current].filter((p, i, a) => a.indexOf(p) === i);
+  return { ...process.env, PATH: merged.join(":") };
+}
 
 interface BastionConfig {
   url: string;
@@ -106,14 +121,6 @@ async function connectViaBastion(
     throw new Error(`bastion /api/connect failed: ${detail}`);
   }
 
-  // Save the freshly-issued private key. ~/.ssh/ might not exist on a
-  // brand-new account; create with the right perms.
-  const keyDir = dirname(KEY_PATH);
-  try {
-    mkdirSync(keyDir, { mode: 0o700 });
-  } catch (e: any) {
-    if (e?.code !== "EEXIST") throw e;
-  }
   writeFileSync(KEY_PATH, res.private_key, { mode: 0o600 });
   chmodSync(KEY_PATH, 0o600);
   log.info(`wrote bastion-issued ssh key to ${KEY_PATH}`);
@@ -133,7 +140,7 @@ async function connectViaBastion(
     "--dns",
   ];
   log.info(`spawning sshuttle ${args.join(" ")}`);
-  const sshuttle = spawn("sshuttle", args, { env: process.env });
+  const sshuttle = spawn("sshuttle", args, { env: spawnEnvWithBrewPath() });
 
   sshuttle.stdout.on("data", (d) => process.stdout.write(`[sshuttle] ${d}`));
   sshuttle.stderr.on("data", (d) => process.stderr.write(`[sshuttle] ${d}`));
