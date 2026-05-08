@@ -143,6 +143,18 @@ fi
 
 ls -lh "$ZIP"
 
+# Optional per-release changelog. Drop a file at release-notes/<TAG>.md
+# (e.g. release-notes/v0.1.1.md) and it will be prepended to the release body.
+NOTES_FILE="$PROJECT_ROOT/release-notes/${TAG}.md"
+CHANGELOG=""
+if [[ -f "$NOTES_FILE" ]]; then
+  CHANGELOG="$(cat "$NOTES_FILE")
+
+---
+
+"
+fi
+
 echo "==> Creating GitHub release $TAG on $REPO (target $TARGET_BRANCH)"
 gh release create "$TAG" \
   --repo "$REPO" \
@@ -150,7 +162,7 @@ gh release create "$TAG" \
   --title "$TAG" \
   --notes-file - \
   "$ZIP" <<EOF
-Pre-built macOS Apple Silicon build. ${RELEASE_NOTES_BUILD}
+${CHANGELOG}Pre-built macOS Apple Silicon build. ${RELEASE_NOTES_BUILD}
 
 ## Install
 

@@ -7,6 +7,10 @@ interface StatusWindowHandle {
   awaitDisconnect: Promise<void>;
   /** Notify the renderer that the underlying process has exited. */
   notifyDisconnected: () => void;
+  /** Notify the renderer that we are between attempts of an auto-reconnect. */
+  notifyReconnecting: (attempt: number, delayMs: number) => void;
+  /** Notify the renderer that the tunnel is up (initial connect or reconnect success). */
+  notifyConnected: (attempt?: number) => void;
   /** Bring the (possibly hidden) window back to the foreground. */
   show: () => void;
   /** Tear down the window for real (used during quit). */
@@ -61,6 +65,16 @@ async function createConnectionStatusWindow(
     notifyDisconnected: () => {
       if (!win.isDestroyed()) {
         win.webContents.send("status-disconnected");
+      }
+    },
+    notifyReconnecting: (attempt, delayMs) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("status-reconnecting", { attempt, delayMs });
+      }
+    },
+    notifyConnected: (attempt) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("status-connected", { attempt: attempt ?? 0 });
       }
     },
     show: () => {

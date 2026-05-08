@@ -146,33 +146,111 @@ async function enterEntryPoint(): Promise<void> {
     await portal.doSamlAuth();
     const policy = await portal.getConfig();
     hostWindow.close();
-    const selGateway = await createGatewaySelectionWindow(policy.gateways);
     const fingerprint = portal.fingerprint;
-    const gateway = new Gateway(
-      selGateway,
-      policy.portalUserAuthCookie,
-      policy.userName,
-    );
-    const loginResp = await gateway.doLogin();
-    vpnProcess = connectVpn(
-      loginResp,
-      loginResp.user,
-      fingerprint!,
-      gateway.hostname,
-    );
 
-    statusWindow = await createConnectionStatusWindow(gateway.hostname);
-    vpnProcess.on("close", () => {
-      statusWindow?.notifyDisconnected();
-    });
-    await statusWindow.awaitDisconnect;
-    if (vpnProcess && vpnProcess.exitCode === null) {
-      vpnProcess.kill();
+    // Backoff schedule (ms) — capped at 60s, used after the n-th failure.
+    const BACKOFF = [2000, 5000, 10000, 20000, 30000, 60000];
+
+    // Outer loop: gateway selection → connect → disconnect → back to selection.
+    // User exits via the tray "Quit gpsaml" menu, or by closing the gateway
+    // selection window without picking anything.
+    while (true) {
+      const selGateway = await createGatewaySelectionWindow(policy.gateways);
+      if (!selGateway) {
+        // User dismissed the gateway selector — exit the app.
+        app.quit();
+        return;
+      }
+      const gateway = new Gateway(
+        selGateway,
+        policy.portalUserAuthCookie,
+        policy.userName,
+      );
+
+      statusWindow = await createConnectionStatusWindow(gateway.hostname);
+
+      const ac = new AbortController();
+      statusWindow.awaitDisconnect.then(() => ac.abort());
+
+      const sleep = (ms: number) =>
+        new Promise<void>((resolve) => {
+          if (ac.signal.aborted) return resolve();
+          const t = setTimeout(resolve, ms);
+          ac.signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(t);
+              resolve();
+            },
+            { once: true },
+          );
+        });
+
+      const waitClose = (proc: ChildProcess) =>
+        new Promise<void>((resolve) => {
+          if (proc.exitCode !== null) return resolve();
+          proc.once("close", () => resolve());
+          ac.signal.addEventListener(
+            "abort",
+            () => {
+              if (proc.exitCode === null) proc.kill();
+            },
+            { once: true },
+          );
+        });
+
+      let attempt = 0;
+      let stoppedReason: "user" | "auth-failed" | null = null;
+      while (!ac.signal.aborted) {
+        let loginResp;
+        try {
+          loginResp = await gateway.doLogin();
+        } catch (e) {
+          log.error("gateway re-login failed:", e);
+          stoppedReason = "auth-failed";
+          break;
+        }
+        vpnProcess = connectVpn(
+          loginResp,
+          loginResp.user,
+          fingerprint!,
+          gateway.hostname,
+        );
+        if (attempt === 0) {
+          statusWindow.notifyConnected();
+        } else {
+          statusWindow.notifyConnected(attempt);
+        }
+
+        await waitClose(vpnProcess);
+
+        if (ac.signal.aborted) {
+          stoppedReason = "user";
+          break;
+        }
+
+        attempt += 1;
+        const delay = BACKOFF[Math.min(attempt - 1, BACKOFF.length - 1)];
+        statusWindow.notifyReconnecting(attempt, delay);
+        log.warn(
+          `openconnect exited unexpectedly; reconnect attempt ${attempt} in ${delay}ms`,
+        );
+        await sleep(delay);
+      }
+
+      if (stoppedReason === "auth-failed") {
+        // Cookie no longer valid — show the disconnected screen and wait for
+        // the user to dismiss it before going back to gateway selection.
+        vpnProcess = null;
+        statusWindow.notifyDisconnected();
+        await statusWindow.awaitDisconnect;
+      }
+      vpnProcess = null;
+      statusWindow.close();
+      statusWindow = null;
+      // Loop back to gateway selection. User can pick again, or close the
+      // selector window to quit.
     }
-    vpnProcess = null;
-    statusWindow.close();
-    statusWindow = null;
-    app.quit();
   } catch (e) {
     log.error("login flow failed:", e);
     // No modal dialog and no quit — the tray remains so the user can

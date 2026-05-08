@@ -149,6 +149,14 @@
       animation: none;
       filter: grayscale(0.6);
     }
+    .pulse.reconnecting .ring {
+      animation-duration: 1.6s;
+      border-color: #C58F2E;
+    }
+    .pulse.reconnecting .pup-mark {
+      background: #C58F2E;
+      box-shadow: 0 4px 16px rgba(197,143,46,0.28), 0 0 0 4px var(--surface);
+    }
     .pulse.disconnected .ring { display: none; }
     .pulse.disconnected .pup-mark {
       background: var(--alert);
@@ -156,6 +164,11 @@
       animation: none;
       filter: grayscale(0.85) brightness(0.9);
     }
+    .status-bar.reconnecting .led {
+      background: #C58F2E;
+      box-shadow: 0 0 0 2px rgba(197,143,46,0.18);
+    }
+    .label.reconnecting { color: #C58F2E; }
 
     /* === text === */
     .label {
