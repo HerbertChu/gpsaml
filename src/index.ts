@@ -303,6 +303,11 @@ async function enterEntryPoint(): Promise<void> {
   }
 }
 
+function shellEscape(s: string): string {
+  // POSIX-safe single-quote escaping.
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
 function relaunchAsRoot() {
   console.log("Root privileges required. Relaunching with sudo...");
   const args = process.argv
@@ -322,7 +327,24 @@ function relaunchAsRoot() {
       /"/g,
       '\\"',
     );
-    command = `cd "${cwd.replace(/"/g, '\\"')}" && "${process.execPath}" --disable-gpu --no-sandbox ${args} > "${logPath}" 2>&1 & disown`;
+
+    // sudo-prompt invokes the elevated child via osascript with
+    // administrator privileges, which strips the user's environment.
+    // Forward the env vars our code actually reads so config like
+    // bastion mode survives the privilege jump.
+    const propagate = [
+      "GPSAML_BASTION_URL",
+      "GPSAML_BASTION_SECRET",
+      "GPSAML_LOG",
+      "OPENCONNECT_PATH",
+      "HIP_SCRIPT",
+    ];
+    const envPrefix = propagate
+      .filter((k) => process.env[k])
+      .map((k) => `${k}=${shellEscape(process.env[k]!)}`)
+      .join(" ");
+    const envBlock = envPrefix ? `${envPrefix} ` : "";
+    command = `cd "${cwd.replace(/"/g, '\\"')}" && ${envBlock}"${process.execPath}" --disable-gpu --no-sandbox ${args} > "${logPath}" 2>&1 & disown`;
   }
 
   const options = {
