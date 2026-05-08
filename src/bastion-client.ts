@@ -98,11 +98,13 @@ async function connectViaBastion(
           "Content-Type": "application/json",
           "X-GPSAML-Signature": signature,
         },
-        // The bastion's provision can take 60–120s end-to-end (HIP +
-        // auth + tunnel-up poll, longer on a warm reconnect that has
-        // to tear down a prior session first). Server-side timeouts
-        // are 180s; give the client a bit more headroom.
-        timeout: { request: 240_000 },
+        // The bastion's provision can take ~170s end-to-end (HIP +
+        // auth + tunnel-up poll on a remote PAN gateway is the long
+        // pole). Server-side budgets: provision deadline 150s,
+        // call_provision 300s, gunicorn 320s. Give the client just a
+        // little more so the network slowest-link pops up here as a
+        // got error, not a generic socket close.
+        timeout: { request: 330_000 },
         retry: { limit: 0 },
       })
       .json<ConnectResponse>();
