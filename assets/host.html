@@ -144,6 +144,11 @@
       color: var(--text);
       caret-color: var(--orange);
       padding: 11px 14px 11px 6px;
+      /* body sets `user-select: none` for chrome — re-enable selection here
+         so Cmd+A / mouse-drag selection / paste work inside the input. */
+      user-select: text;
+      -webkit-user-select: text;
+      cursor: text;
     }
     .field::placeholder { color: var(--text-faint); }
     .field:disabled { color: var(--text-dim); cursor: progress; }
@@ -188,6 +193,58 @@
       30%, 50%, 70% { transform: translateX(-3px); }
       40%, 60% { transform: translateX(3px); }
     }
+
+    /* === remember row === */
+    .remember {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.02em;
+      user-select: none;
+      align-self: flex-start;
+    }
+    .remember input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 0; height: 0;
+    }
+    .remember-box {
+      flex: none;
+      width: 14px; height: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 3px;
+      background: var(--surface);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s ease, background 0.15s ease,
+                  box-shadow 0.15s ease;
+    }
+    .remember-box::after {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 1px;
+      background: var(--surface);
+      transform: scale(0);
+      transition: transform 0.12s ease;
+    }
+    .remember:hover .remember-box { border-color: var(--text-dim); }
+    .remember input:focus-visible ~ .remember-box {
+      box-shadow: 0 0 0 3px var(--orange-soft);
+      border-color: var(--orange);
+    }
+    .remember input:checked ~ .remember-box {
+      background: var(--orange);
+      border-color: var(--orange);
+    }
+    .remember input:checked ~ .remember-box::after { transform: scale(1); }
+    .remember:hover .remember-label { color: var(--text); }
+    .remember-label { transition: color 0.15s ease; }
 
     /* === actions === */
     .actions {
@@ -269,6 +326,12 @@
                autocomplete="off" autocapitalize="off"
                spellcheck="false" autofocus required />
       </div>
+
+      <label class="remember" for="remember">
+        <input type="checkbox" id="remember" name="remember" />
+        <span class="remember-box" aria-hidden="true"></span>
+        <span class="remember-label">remember this address</span>
+      </label>
 
       <div class="error-banner" id="errorBanner" hidden role="alert"></div>
 
