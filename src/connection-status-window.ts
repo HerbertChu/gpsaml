@@ -11,6 +11,14 @@ interface StatusWindowHandle {
   notifyReconnecting: (attempt: number, delayMs: number) => void;
   /** Notify the renderer that the tunnel is up (initial connect or reconnect success). */
   notifyConnected: (attempt?: number) => void;
+  /**
+   * Trigger the same disconnect path the in-window button does — used by
+   * the tray "Disconnect" menu item so it goes through the userInitiated
+   * teardown (and aborts the reconnect loop) instead of just SIGTERMing
+   * the child, which the loop would treat as an unexpected drop and
+   * reconnect from.
+   */
+  requestDisconnect: () => void;
   /** Bring the (possibly hidden) window back to the foreground. */
   show: () => void;
   /** Tear down the window for real (used during quit). */
@@ -76,6 +84,16 @@ async function createConnectionStatusWindow(
       if (!win.isDestroyed()) {
         win.webContents.send("status-connected", { attempt: attempt ?? 0 });
       }
+    },
+    requestDisconnect: () => {
+      // Have the renderer drive its own UI update (sets userInitiated,
+      // flips the button to "disconnecting", etc.) then it sends back
+      // disconnect-requested, which calls settle. settle() is also
+      // invoked directly as a fallback in case the window is unresponsive.
+      if (!win.isDestroyed()) {
+        win.webContents.send("force-disconnect");
+      }
+      settle();
     },
     show: () => {
       if (win.isDestroyed()) return;

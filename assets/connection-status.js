@@ -105,6 +105,12 @@ ipcRenderer.on("status-reconnecting", (_e, payload) => {
   button.textContent = "cancel";
 });
 
+ipcRenderer.on("force-disconnect", () => {
+  // Tray menu requested disconnect — route through the button so the
+  // UI updates the same way (userInitiated flag, "tearing down" label).
+  if (!button.disabled) button.click();
+});
+
 ipcRenderer.on("status-disconnected", () => {
   tunnelDown = true;
   reconnecting = false;
