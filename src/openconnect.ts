@@ -59,7 +59,6 @@ function connectVpn(
 
   const isWin = process.platform === "win32";
   const args = [
-    "--dump-http-traffic",
     "--protocol=gp",
     "-u",
     `${loginResp.domain}\\${samlUsername}`,
