@@ -24,6 +24,10 @@
       --font-mono: ui-monospace, "SF Mono", "Menlo", "Monaco", monospace;
     }
     * { box-sizing: border-box; }
+    /* Class-level `display: flex` rules below would otherwise outweigh the
+       UA-default `[hidden] { display: none }`, leaving the loading panel
+       (and others) stuck visible after `.hidden = true`. */
+    [hidden] { display: none !important; }
     html, body {
       margin: 0; padding: 0; height: 100vh;
       background: var(--bg);

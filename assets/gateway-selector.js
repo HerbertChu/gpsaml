@@ -101,6 +101,9 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
     select(Math.max(selectedIndex - 1, 0));
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (selectedIndex >= 0 && !connectBtn.disabled) form.requestSubmit();
   }
 });
 
